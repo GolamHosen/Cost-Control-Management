@@ -1,0 +1,43 @@
+import { redirect } from "next/navigation";
+import { listProjects } from "@/lib/queries";
+import { asc } from "drizzle-orm";
+import { db, ensureAuthTables } from "@/db";
+import { users } from "@/db/schema";
+import { getSession } from "@/lib/auth";
+import DashboardClient from "@/components/DashboardClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  await ensureAuthTables();
+
+  // Only admin and manager can access the dashboard
+  const session = await getSession();
+  if (!session || session.role === "member") {
+    redirect("/projects");
+  }
+
+  const projects = await listProjects();
+
+  const teamMembers = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      phone: users.phone,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .orderBy(asc(users.name));
+
+  return (
+    <DashboardClient
+      projects={projects}
+      teamMembers={teamMembers.map((u: any) => ({
+        ...u,
+        createdAt: u.createdAt ? String(u.createdAt) : "",
+      }))}
+    />
+  );
+}
