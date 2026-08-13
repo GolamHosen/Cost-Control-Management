@@ -29,7 +29,7 @@ export default function LoginPage() {
           setRole("member");
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [mode]);
 
   function selectLoginRole(targetRole: "admin" | "member") {
@@ -66,7 +66,7 @@ export default function LoginPage() {
 
     try {
       // Ensure initial tables are verified
-      await fetch("/api/auth/seed", { method: "POST" }).catch(() => {});
+      await fetch("/api/auth/seed", { method: "POST" }).catch(() => { });
 
       if (mode === "login") {
         const res = await fetch("/api/auth/login", {
@@ -119,7 +119,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            BuildLedger
+            Hujurat Construction
           </h1>
           <p className="mt-1 text-xs text-slate-400">
             Construction Cost Control &amp; Project Management System
@@ -136,11 +136,10 @@ export default function LoginPage() {
                 setMode("login");
                 setError("");
               }}
-              className={`rounded-xl py-2.5 text-xs font-bold transition-all ${
-                mode === "login"
+              className={`rounded-xl py-2.5 text-xs font-bold transition-all ${mode === "login"
                   ? "bg-amber-500 text-slate-950 shadow-md"
                   : "text-slate-400 hover:text-white"
-              }`}
+                }`}
             >
               Sign In
             </button>
@@ -150,11 +149,10 @@ export default function LoginPage() {
                 setMode("register");
                 setError("");
               }}
-              className={`rounded-xl py-2.5 text-xs font-bold transition-all ${
-                mode === "register"
+              className={`rounded-xl py-2.5 text-xs font-bold transition-all ${mode === "register"
                   ? "bg-amber-500 text-slate-950 shadow-md"
                   : "text-slate-400 hover:text-white"
-              }`}
+                }`}
             >
               Register Account
             </button>
@@ -246,11 +244,10 @@ export default function LoginPage() {
                     type="button"
                     disabled={hasAdmin}
                     onClick={() => !hasAdmin && setRole("admin")}
-                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
-                      role === "admin"
+                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${role === "admin"
                         ? "border-amber-500 bg-amber-500/10 text-amber-400"
                         : "border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-600"
-                    } ${hasAdmin ? "opacity-40 cursor-not-allowed" : ""}`}
+                      } ${hasAdmin ? "opacity-40 cursor-not-allowed" : ""}`}
                   >
                     <span className="text-sm font-bold">⚡ Register as Admin</span>
                     <span className="mt-0.5 text-[10px] opacity-80">
@@ -261,11 +258,10 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setRole("member")}
-                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
-                      role === "member"
+                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${role === "member"
                         ? "border-amber-500 bg-amber-500/10 text-amber-400"
                         : "border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-600"
-                    }`}
+                      }`}
                   >
                     <span className="text-sm font-bold">🏗️ Register as Member</span>
                     <span className="mt-0.5 text-[10px] opacity-80">Project Team</span>
@@ -284,8 +280,8 @@ export default function LoginPage() {
                   ? "Signing in…"
                   : "Registering…"
                 : mode === "login"
-                ? `Sign In as ${loginRole === "admin" ? "Admin" : "Team Member"} →`
-                : `Register as ${role === "admin" ? "Admin" : "Team Member"} →`}
+                  ? `Sign In as ${loginRole === "admin" ? "Admin" : "Team Member"} →`
+                  : `Register as ${role === "admin" ? "Admin" : "Team Member"} →`}
             </button>
           </form>
 
@@ -299,11 +295,10 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => selectLoginRole("admin")}
-                  className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
-                    loginRole === "admin"
+                  className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${loginRole === "admin"
                       ? "border-amber-500 bg-amber-500/10 text-amber-400"
                       : "border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-600"
-                  }`}
+                    }`}
                 >
                   <span className="text-sm font-bold">⚡ Sign In as Admin</span>
                   <span className="mt-0.5 text-[10px] opacity-80">Full Dashboard</span>
@@ -312,11 +307,10 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => selectLoginRole("member")}
-                  className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
-                    loginRole === "member"
+                  className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${loginRole === "member"
                       ? "border-amber-500 bg-amber-500/10 text-amber-400"
                       : "border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-600"
-                  }`}
+                    }`}
                 >
                   <span className="text-sm font-bold">🏗️ Sign In as Member</span>
                   <span className="mt-0.5 text-[10px] opacity-80">Project Team</span>
