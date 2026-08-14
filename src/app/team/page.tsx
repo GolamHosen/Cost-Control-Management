@@ -8,13 +8,13 @@ import TeamClient from "@/components/TeamClient";
 export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
-  await ensureSupabaseUserTables();
-
   // Only admin and manager can access team management
   const session = await getSession();
   if (!session || session.role === "member") {
     redirect("/projects");
   }
+
+  await ensureSupabaseUserTables();
 
   const teamMembers = await supabaseDb
     .select({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Column, Sheet, SheetRow, SheetType } from "@/lib/types";
 import { COLUMN_TYPES, RECONCILE_ROLES } from "@/lib/types";
 import { formatCurrency, formatNumber, parseNumber } from "@/lib/finance";
@@ -54,18 +54,24 @@ export default function Spreadsheet({
   const rows = sheet.rows;
   const [selected, setSelected] = useState<{ r: number; c: number } | null>(null);
   const [draft, setDraft] = useState("");
-  const activeInput = useRef<HTMLElement | null>(null);
+  const activeInputId = useId();
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
   const cellValue = (r: number, c: number) => rows[r]?.cells[cols[c]?.id] ?? "";
 
   useEffect(() => {
-    const el = activeInput.current;
-    if (el) {
+    if (!selected) return;
+
+    const frame = requestAnimationFrame(() => {
+      const el = document.getElementById(activeInputId);
+      if (!el) return;
+
       el.focus();
       if (el instanceof HTMLInputElement && el.type === "text") el.select();
-    }
-  }, [selected]);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [activeInputId, selected]);
 
   function commit() {
     if (!selected) return;
@@ -153,9 +159,7 @@ export default function Spreadsheet({
 
     if (isSel) {
       const common = {
-        ref: (el: HTMLElement | null) => {
-          activeInput.current = el;
-        },
+        id: activeInputId,
         value: draft,
         onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
           setDraft(e.target.value),

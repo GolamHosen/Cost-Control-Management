@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import UserAvatar from "./UserAvatar";
 
 interface Contact {
@@ -43,27 +43,27 @@ export default function MessagesClient({
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // 1. Fetch contact list
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     try {
       const res = await fetch("/api/messages");
       if (res.ok) {
         const data = await res.json();
         setContacts(data.contacts || []);
 
-        // Auto-select first contact if none selected
-        if (!selectedPartnerId && data.contacts?.length > 0) {
-          setSelectedPartnerId(data.contacts[0].user.id);
-        }
+        // Auto-select a contact once, without depending on a stale render.
+        setSelectedPartnerId(
+          (currentPartnerId) => currentPartnerId ?? data.contacts?.[0]?.user.id ?? null
+        );
       }
     } catch {
       // ignore transient network errors
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 2. Fetch thread history for selected partner
-  const fetchThread = async (partnerId: number) => {
+  const fetchThread = useCallback(async (partnerId: number) => {
     try {
       const res = await fetch(`/api/messages/${partnerId}`);
       if (res.ok) {
@@ -86,29 +86,38 @@ export default function MessagesClient({
     } catch {
       // ignore transient network errors
     }
-  };
+  }, []);
 
   // Initial load & smart polling (10s interval, active tab only)
   useEffect(() => {
-    fetchContacts();
+    const initialLoad = window.setTimeout(() => {
+      void fetchContacts();
+    }, 0);
 
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
-      fetchContacts();
+      void fetchContacts();
       if (selectedPartnerId) {
-        fetchThread(selectedPartnerId);
+        void fetchThread(selectedPartnerId);
       }
     }, 10000);
 
-    return () => clearInterval(interval);
-  }, [selectedPartnerId]);
+    return () => {
+      window.clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
+  }, [fetchContacts, fetchThread, selectedPartnerId]);
 
   // Load thread when selected partner changes
   useEffect(() => {
-    if (selectedPartnerId) {
-      fetchThread(selectedPartnerId);
-    }
-  }, [selectedPartnerId]);
+    if (!selectedPartnerId) return;
+
+    const threadLoad = window.setTimeout(() => {
+      void fetchThread(selectedPartnerId);
+    }, 0);
+
+    return () => window.clearTimeout(threadLoad);
+  }, [fetchThread, selectedPartnerId]);
 
   // Auto-scroll chat window to bottom on new messages
   useEffect(() => {
@@ -139,7 +148,7 @@ export default function MessagesClient({
       if (res.ok) {
         const newMsg: Message = await res.json();
         setMessagesThread((prev) => [...prev, newMsg]);
-        fetchContacts();
+        void fetchContacts();
       }
     } catch {
       alert("Failed to send message. Please try again.");

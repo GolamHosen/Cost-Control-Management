@@ -45,12 +45,15 @@ export default function Workspace({ initial }: { initial: Project }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-  const put = (path: string, body: unknown) =>
-    fetch(base + path, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const put = useCallback(
+    (path: string, body: unknown) =>
+      fetch(base + path, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    [base],
+  );
   const patch = (path: string, body: unknown) =>
     fetch(base + path, {
       method: "PATCH",
@@ -78,7 +81,7 @@ export default function Workspace({ initial }: { initial: Project }) {
       }));
       put("/cells", { rowId, columnId, value }).catch(() => {});
     },
-    [base],
+    [put],
   );
 
   const addRow = (sheetId: number) => {

@@ -9,13 +9,13 @@ import DashboardClient from "@/components/DashboardClient";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  await ensureSupabaseUserTables();
-
   // Only admin and manager can access the dashboard
   const session = await getSession();
   if (!session || session.role === "member") {
     redirect("/projects");
   }
+
+  await ensureSupabaseUserTables();
 
   const projects = await listProjects();
 

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { getAvatarColor, getInitials } from "./Sidebar";
 
 type UserAvatarProps = {
@@ -13,6 +14,14 @@ const SIZE_CLASSES = {
   md: "h-10 w-10 text-xs",
   lg: "h-12 w-12 text-sm",
   xl: "h-24 w-24 text-2xl",
+};
+
+const SIZE_PIXELS = {
+  xs: 28,
+  sm: 32,
+  md: 40,
+  lg: 48,
+  xl: 96,
 };
 
 export default function UserAvatar({

@@ -1,14 +1,19 @@
 import { createClient } from "@libsql/client";
+import dotenv from "dotenv";
 import pg from "pg";
+import { readSupabaseConnectionString } from "./supabase-connection.mjs";
+
+dotenv.config({ quiet: true });
 
 const { Pool } = pg;
-const { SUPABASE_DATABASE_URL, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, PURGE_TURSO_USER_DATA } = process.env;
+const { TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, PURGE_TURSO_USER_DATA } = process.env;
+const { connectionString: supabaseConnectionString } = readSupabaseConnectionString();
 
-if (!SUPABASE_DATABASE_URL || !TURSO_DATABASE_URL) {
-  throw new Error("SUPABASE_DATABASE_URL and TURSO_DATABASE_URL are both required.");
+if (!TURSO_DATABASE_URL) {
+  throw new Error("TURSO_DATABASE_URL is required.");
 }
 
-const supabase = new Pool({ connectionString: SUPABASE_DATABASE_URL });
+const supabase = new Pool({ connectionString: supabaseConnectionString });
 const turso = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN });
 
 async function tursoTableExists(name) {
@@ -95,10 +100,11 @@ async function copyUserData() {
   const [users, messages] = await Promise.all([readTursoUsers(), readTursoMessages()]);
   await ensureSupabaseUserTables();
 
-  await supabase.query("BEGIN");
+  const client = await supabase.connect();
   try {
+    await client.query("BEGIN");
     for (const user of users) {
-      await supabase.query(
+      await client.query(
         `INSERT INTO users (id, name, email, password, role, phone, avatar_url, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO UPDATE SET
@@ -119,7 +125,7 @@ async function copyUserData() {
     }
 
     for (const message of messages) {
-      await supabase.query(
+      await client.query(
         `INSERT INTO messages (id, sender_id, receiver_id, content, is_read, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO UPDATE SET
@@ -136,16 +142,18 @@ async function copyUserData() {
       );
     }
 
-    await supabase.query(
+    await client.query(
       "SELECT setval(pg_get_serial_sequence('users', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM users), 1), 1), true)",
     );
-    await supabase.query(
+    await client.query(
       "SELECT setval(pg_get_serial_sequence('messages', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM messages), 1), 1), true)",
     );
-    await supabase.query("COMMIT");
+    await client.query("COMMIT");
   } catch (error) {
-    await supabase.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     throw error;
+  } finally {
+    client.release();
   }
 
   console.log(`Copied ${users.length} users and ${messages.length} messages to Supabase.`);
