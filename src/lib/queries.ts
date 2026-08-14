@@ -1,16 +1,12 @@
-import { asc, desc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { columns, projects, rows, sheets, projectMembers, users } from "@/db/schema";
-import type { Column, Project, ProjectMember, Sheet, SheetRow, UserRole } from "./types";
+import { asc, desc, eq, inArray } from "drizzle-orm";
+import { supabaseDb, tursoDb } from "@/db";
+import { columns, projectMembers, projects, rows, sheets, users } from "@/db/schema";
+import type { Column, Project, ProjectMember, Sheet, SheetRow, User, UserRole } from "./types";
 
 async function rawList() {
-  return db.query.projects.findMany({
+  return tursoDb.query.projects.findMany({
     with: {
-      members: {
-        with: {
-          user: true,
-        },
-      },
+      members: true,
       sheets: {
         orderBy: [asc(sheets.position)],
         with: {
@@ -51,8 +47,8 @@ function mapSheet(s: RawProject["sheets"][number]): Sheet {
     columns: s.columns.map(mapColumn),
     rows: s.rows
       .slice()
-      .sort((a: any, b: any) => a.position - b.position)
-      .map((r: any): SheetRow => {
+      .sort((a, b) => a.position - b.position)
+      .map((r): SheetRow => {
         const cellMap: Record<number, string> = {};
         for (const cell of r.cells) cellMap[cell.columnId] = cell.value ?? "";
         return { id: r.id, position: r.position, cells: cellMap };
@@ -65,19 +61,8 @@ function mapMember(m: RawProject["members"][number]): ProjectMember {
     id: m.id,
     projectId: m.projectId,
     userId: m.userId,
-    role: m.role as any,
+    role: m.role as ProjectMember["role"],
     assignedAt: m.assignedAt ? String(m.assignedAt) : "",
-    user: m.user
-      ? {
-          id: m.user.id,
-          name: m.user.name,
-          email: m.user.email,
-          role: m.user.role as UserRole,
-          phone: m.user.phone ?? null,
-          avatarUrl: m.user.avatarUrl ?? null,
-          createdAt: m.user.createdAt ? String(m.user.createdAt) : "",
-        }
-      : undefined,
   };
 }
 
@@ -92,34 +77,70 @@ function mapProject(p: RawProject): Project {
     status: p.status,
     progress: p.progress ?? 0,
     createdAt: p.createdAt ? String(p.createdAt) : "",
-    sheets: p.sheets.slice().sort((a: any, b: any) => a.position - b.position).map(mapSheet),
-    members: p.members ? p.members.map(mapMember) : [],
+    sheets: p.sheets.slice().sort((a, b) => a.position - b.position).map(mapSheet),
+    members: p.members.map(mapMember),
   };
 }
 
+/** Adds Supabase user details to Turso project memberships without a cross-DB join. */
+async function hydrateMembers(projectList: Project[]): Promise<Project[]> {
+  const userIds = [...new Set(projectList.flatMap((project) => project.members?.map((m) => m.userId) ?? []))];
+  if (!userIds.length) return projectList;
+
+  const dbUsers = await supabaseDb
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      phone: users.phone,
+      avatarUrl: users.avatarUrl,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(inArray(users.id, userIds));
+
+  const usersById = new Map<number, User>(
+    dbUsers.map((user) => [
+      user.id,
+      {
+        ...user,
+        role: user.role as UserRole,
+        phone: user.phone ?? null,
+        avatarUrl: user.avatarUrl ?? null,
+        createdAt: String(user.createdAt),
+      },
+    ]),
+  );
+
+  return projectList.map((project) => ({
+    ...project,
+    members: project.members?.map((member) => ({
+      ...member,
+      user: usersById.get(member.userId),
+    })),
+  }));
+}
+
 export async function listProjects(userId?: number, userRole?: string): Promise<Project[]> {
-  const all = await rawList();
-  if (userRole === "member" && userId) {
-    return all
-      .filter((p: any) => p.members.some((m: any) => m.userId === userId))
-      .map(mapProject);
-  }
-  return all.map(mapProject);
+  const rawProjects = await rawList();
+  const visibleProjects =
+    userRole === "member" && userId
+      ? rawProjects.filter((project) => project.members.some((member) => member.userId === userId))
+      : rawProjects;
+
+  return hydrateMembers(visibleProjects.map(mapProject));
 }
 
 export async function getProject(
   id: number,
   userId?: number,
-  userRole?: string
+  userRole?: string,
 ): Promise<Project | null> {
-  const p = await db.query.projects.findFirst({
+  const project = await tursoDb.query.projects.findFirst({
     where: eq(projects.id, id),
     with: {
-      members: {
-        with: {
-          user: true,
-        },
-      },
+      members: true,
       sheets: {
         orderBy: [asc(sheets.position)],
         with: {
@@ -133,12 +154,12 @@ export async function getProject(
     },
   });
 
-  if (!p) return null;
+  if (!project) return null;
 
-  if (userRole === "member" && userId) {
-    const isMember = p.members.some((m: any) => m.userId === userId);
-    if (!isMember) return null;
+  if (userRole === "member" && userId && !project.members.some((member) => member.userId === userId)) {
+    return null;
   }
 
-  return mapProject(p as any);
+  const [hydrated] = await hydrateMembers([mapProject(project)]);
+  return hydrated;
 }

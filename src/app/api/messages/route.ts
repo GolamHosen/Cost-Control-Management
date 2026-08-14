@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
-import { db } from "@/db";
+import { supabaseDb as db } from "@/db";
 import { messages, users } from "@/db/schema";
 import { and, eq, or, desc, sql } from "drizzle-orm";
 

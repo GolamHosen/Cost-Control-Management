@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { eq } from "drizzle-orm";
 import "./globals.css";
 import { getSession } from "@/lib/auth";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import AppShell from "@/components/AppShell";
 
@@ -18,7 +18,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   try {
     const session = await getSession();
     if (session) {
-      await ensureAuthTables();
+      await ensureSupabaseUserTables();
       const [dbUser] = await db
         .select({
           name: users.name,

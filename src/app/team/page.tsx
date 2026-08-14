@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb, tursoDb } from "@/db";
 import { users, projectMembers, projects } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import TeamClient from "@/components/TeamClient";
@@ -8,7 +8,7 @@ import TeamClient from "@/components/TeamClient";
 export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   // Only admin and manager can access team management
   const session = await getSession();
@@ -16,7 +16,7 @@ export default async function TeamPage() {
     redirect("/projects");
   }
 
-  const teamMembers = await db
+  const teamMembers = await supabaseDb
     .select({
       id: users.id,
       name: users.name,
@@ -30,7 +30,7 @@ export default async function TeamPage() {
     .orderBy(asc(users.name));
 
   // Get all project assignments with project info
-  const assignments = await db
+  const assignments = await tursoDb
     .select({
       userId: projectMembers.userId,
       memberRole: projectMembers.role,
@@ -57,7 +57,7 @@ export default async function TeamPage() {
   }
 
   // Get all projects for the assignment modal
-  const allProjects = await db
+  const allProjects = await tursoDb
     .select({ id: projects.id, name: projects.name, status: projects.status })
     .from(projects)
     .orderBy(asc(projects.name));

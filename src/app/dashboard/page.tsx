@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { listProjects } from "@/lib/queries";
 import { asc } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import DashboardClient from "@/components/DashboardClient";
@@ -9,7 +9,7 @@ import DashboardClient from "@/components/DashboardClient";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   // Only admin and manager can access the dashboard
   const session = await getSession();

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession, verifyPassword } from "@/lib/auth";
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure auth tables exist
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const userList = await db.select().from(users).where(eq(users.email, email));
   const user = userList[0];

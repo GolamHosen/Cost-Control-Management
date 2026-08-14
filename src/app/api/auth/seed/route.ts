@@ -1,4 +1,4 @@
-import { ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables } from "@/db";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function POST() {
 
 async function verifyAuthSystem() {
   try {
-    await ensureAuthTables();
+    await ensureSupabaseUserTables();
     return Response.json({
       ok: true,
       message: "Database tables verified",

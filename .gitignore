@@ -4,7 +4,6 @@ node_modules/
 /out
 
 #environment variables / secrets
-.env.example
 .env
 .env.production
 .env.local

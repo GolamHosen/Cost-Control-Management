@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession, getSession, hashPassword, verifyPassword } from "@/lib/auth";
 import { toPublicUser } from "@/lib/avatar-storage";
@@ -8,7 +8,7 @@ import { toPublicUser } from "@/lib/avatar-storage";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const session = await getSession();
   if (!session) {
@@ -36,7 +36,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const session = await getSession();
   if (!session) {

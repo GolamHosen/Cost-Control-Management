@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { db } from "@/db";
+import { tursoDb as db } from "@/db";
 import { projects, projectMembers } from "@/db/schema";
 import { seedDefaultSheets } from "@/lib/defaults";
 import { getSession } from "@/lib/auth";

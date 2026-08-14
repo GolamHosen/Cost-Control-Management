@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { tursoDb as db } from "@/db";
 import { cells, columns, rows, sheets } from "@/db/schema";
 import type { ReconcileRole } from "./types";
 

@@ -1,31 +1,8 @@
-import {
-  sqliteTable,
-  integer,
-  text,
-  numeric,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
+import { integer, numeric, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
-// ----------------------------------------------------------------------------
-// Users — admin / team members
-// ----------------------------------------------------------------------------
-export const users = sqliteTable("users", {
-  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-  name: text("name").notNull(),
-  email: text("email").notNull(),
-  password: text("password").notNull(),
-  role: text("role").notNull().default("member"), // 'admin' | 'manager' | 'member'
-  phone: text("phone"),
-  avatarUrl: text("avatar_url"),
-  createdAt: text("created_at")
-    .default(sql`(CURRENT_TIMESTAMP)`)
-    .notNull(),
-});
-
-// ----------------------------------------------------------------------------
-// Projects — a construction job / build (Turso SQLite Schema)
-// ----------------------------------------------------------------------------
+// Turso contains only project-scoped data. userId is deliberately an opaque
+// Supabase user ID; databases cannot enforce foreign keys across this boundary.
 export const projects = sqliteTable("projects", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -35,31 +12,19 @@ export const projects = sqliteTable("projects", {
   startDate: text("start_date"),
   status: text("status").notNull().default("Active"),
   progress: integer("progress").notNull().default(0),
-  createdAt: text("created_at")
-    .default(sql`(CURRENT_TIMESTAMP)`)
-    .notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
-// ----------------------------------------------------------------------------
-// Project Members — junction table for team assignments
-// ----------------------------------------------------------------------------
 export const projectMembers = sqliteTable("project_members", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  role: text("role").notNull().default("member"), // 'lead' | 'member' | 'viewer'
-  assignedAt: text("assigned_at")
-    .default(sql`(CURRENT_TIMESTAMP)`)
-    .notNull(),
+  userId: integer("user_id").notNull(),
+  role: text("role").notNull().default("member"),
+  assignedAt: text("assigned_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
-// ----------------------------------------------------------------------------
-// Sheets — each project has two predefined (but fully editable) sheets
-// ----------------------------------------------------------------------------
 export const sheets = sqliteTable("sheets", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   projectId: integer("project_id")
@@ -70,9 +35,6 @@ export const sheets = sqliteTable("sheets", {
   position: integer("position").notNull().default(0),
 });
 
-// ----------------------------------------------------------------------------
-// Columns — DYNAMIC headers. Add / delete / rename / retype at will.
-// ----------------------------------------------------------------------------
 export const columns = sqliteTable("columns", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   sheetId: integer("sheet_id")
@@ -86,9 +48,6 @@ export const columns = sqliteTable("columns", {
   position: integer("position").notNull().default(0),
 });
 
-// ----------------------------------------------------------------------------
-// Rows + Cells — Excel-like grid data
-// ----------------------------------------------------------------------------
 export const rows = sqliteTable("rows", {
   id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   sheetId: integer("sheet_id")
@@ -114,13 +73,6 @@ export const cells = sqliteTable(
   }),
 );
 
-// ----------------------------------------------------------------------------
-// Relations — enable db.query.* relational API
-// ----------------------------------------------------------------------------
-export const usersRelations = relations(users, ({ many }) => ({
-  projectMembers: many(projectMembers),
-}));
-
 export const projectsRelations = relations(projects, ({ many }) => ({
   sheets: many(sheets),
   members: many(projectMembers),
@@ -128,7 +80,6 @@ export const projectsRelations = relations(projects, ({ many }) => ({
 
 export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
   project: one(projects, { fields: [projectMembers.projectId], references: [projects.id] }),
-  user: one(users, { fields: [projectMembers.userId], references: [users.id] }),
 }));
 
 export const sheetsRelations = relations(sheets, ({ one, many }) => ({
@@ -149,27 +100,4 @@ export const rowsRelations = relations(rows, ({ one, many }) => ({
 export const cellsRelations = relations(cells, ({ one }) => ({
   row: one(rows, { fields: [cells.rowId], references: [rows.id] }),
   column: one(columns, { fields: [cells.columnId], references: [columns.id] }),
-}));
-
-// ----------------------------------------------------------------------------
-// Messages — 1-on-1 direct messages between users
-// ----------------------------------------------------------------------------
-export const messages = sqliteTable("messages", {
-  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
-  senderId: integer("sender_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  receiverId: integer("receiver_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  isRead: integer("is_read", { mode: "number" }).notNull().default(0),
-  createdAt: text("created_at")
-    .default(sql`(CURRENT_TIMESTAMP)`)
-    .notNull(),
-});
-
-export const messagesRelations = relations(messages, ({ one }) => ({
-  sender: one(users, { fields: [messages.senderId], references: [users.id], relationName: "sentMessages" }),
-  receiver: one(users, { fields: [messages.receiverId], references: [users.id], relationName: "receivedMessages" }),
 }));

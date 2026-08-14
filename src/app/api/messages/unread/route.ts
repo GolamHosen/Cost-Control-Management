@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth";
-import { db } from "@/db";
+import { supabaseDb as db } from "@/db";
 import { messages } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 

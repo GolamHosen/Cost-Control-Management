@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { db } from "@/db";
+import { tursoDb as db } from "@/db";
 import { cells } from "@/db/schema";
 
 export const dynamic = "force-dynamic";

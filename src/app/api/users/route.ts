@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { asc } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const list = await db
     .select({
@@ -26,7 +26,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const body = await req.json().catch(() => ({}));
   const name = (body.name ?? "").toString().trim();

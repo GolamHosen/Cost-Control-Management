@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import {
@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const session = await getSession();
   if (!session) {
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const session = await getSession();
   if (!session) {

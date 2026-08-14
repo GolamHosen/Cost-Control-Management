@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { ensureSupabaseUserTables, supabaseDb, tursoDb } from "@/db";
 import { projectMembers, users } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -8,34 +8,47 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
   const { id } = await params;
   const projectId = Number(id);
 
-  const members = await db
+  const members = await tursoDb
     .select({
       id: projectMembers.id,
       projectId: projectMembers.projectId,
       userId: projectMembers.userId,
       role: projectMembers.role,
       assignedAt: projectMembers.assignedAt,
-      user: {
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        phone: users.phone,
-      },
     })
     .from(projectMembers)
-    .innerJoin(users, eq(projectMembers.userId, users.id))
     .where(eq(projectMembers.projectId, projectId));
 
-  return Response.json(members);
+  if (!members.length) return Response.json([]);
+
+  const userIds = [...new Set(members.map((member) => member.userId))];
+  const memberUsers = await supabaseDb
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      phone: users.phone,
+    })
+    .from(users)
+    .where(inArray(users.id, userIds));
+  const usersById = new Map(memberUsers.map((user) => [user.id, user]));
+
+  // A deleted Supabase user is not returned as a ghost project member.
+  return Response.json(
+    members.flatMap((member) => {
+      const user = usersById.get(member.userId);
+      return user ? [{ ...member, user }] : [];
+    }),
+  );
 }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
   const { id } = await params;
   const projectId = Number(id);
   const body = await req.json().catch(() => ({}));
@@ -46,20 +59,18 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return Response.json({ error: "User ID is required" }, { status: 400 });
   }
 
-  // Check if already assigned
-  const existing = await db
+  const [user] = await supabaseDb.select({ id: users.id }).from(users).where(eq(users.id, userId));
+  if (!user) {
+    return Response.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const existing = await tursoDb
     .select()
     .from(projectMembers)
-    .where(
-      and(
-        eq(projectMembers.projectId, projectId),
-        eq(projectMembers.userId, userId)
-      )
-    );
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
 
   if (existing.length > 0) {
-    // Update role if already assigned
-    await db
+    await tursoDb
       .update(projectMembers)
       .set({ role })
       .where(eq(projectMembers.id, existing[0].id));
@@ -67,7 +78,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return Response.json({ id: existing[0].id, role });
   }
 
-  const [assigned] = await db
+  const [assigned] = await tursoDb
     .insert(projectMembers)
     .values({ projectId, userId, role })
     .returning();
@@ -76,7 +87,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Ctx) {
-  await ensureAuthTables();
   const { id } = await params;
   const projectId = Number(id);
   const { searchParams } = new URL(req.url);
@@ -86,14 +96,9 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     return Response.json({ error: "User ID is required" }, { status: 400 });
   }
 
-  await db
+  await tursoDb
     .delete(projectMembers)
-    .where(
-      and(
-        eq(projectMembers.projectId, projectId),
-        eq(projectMembers.userId, userId)
-      )
-    );
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
 
   return Response.json({ ok: true });
 }

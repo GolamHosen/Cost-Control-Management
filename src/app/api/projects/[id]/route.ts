@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { db } from "@/db";
+import { tursoDb as db } from "@/db";
 import { projects } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import { getProject } from "@/lib/queries";

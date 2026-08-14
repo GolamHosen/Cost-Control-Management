@@ -1,5 +1,5 @@
-import { db, ensureAuthTables } from "@/db";
-import { users, projectMembers } from "@/db/schema";
+import { ensureSupabaseUserTables, supabaseDb, tursoDb } from "@/db";
+import { projectMembers, users } from "@/db/schema";
 import { destroySession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -14,23 +14,19 @@ export async function POST() {
 
 async function clearAllUsers() {
   try {
-    await ensureAuthTables();
+    await ensureSupabaseUserTables();
 
-    // Delete all project memberships and users permanently
-    await db.delete(projectMembers).catch(() => {});
-    await db.delete(users);
-
-    // Destroy active session cookie
+    // Memberships carry Supabase user IDs but remain project data in Turso.
+    await tursoDb.delete(projectMembers);
+    await supabaseDb.delete(users);
     await destroySession().catch(() => {});
 
     return Response.json({
       ok: true,
-      message: "Database registration data cleared completely. You can now register fresh accounts.",
+      message: "Supabase registration data and Turso project memberships were cleared.",
     });
-  } catch (error: any) {
-    return Response.json(
-      { error: error.message || "Failed to clear registration data" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to clear registration data";
+    return Response.json({ error: message }, { status: 500 });
   }
 }

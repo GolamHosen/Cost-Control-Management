@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
-import { db } from "@/db";
+import { tursoDb as db } from "@/db";
 import { columns } from "@/db/schema";
 
 export const dynamic = "force-dynamic";

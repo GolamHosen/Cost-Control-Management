@@ -5,161 +5,72 @@ import { Pool } from "pg";
 import * as pgSchema from "./pg-schema";
 import * as tursoSchema from "./turso-schema";
 
+// Supabase is PostgreSQL-compatible; DATABASE_URL is accepted only as a
+// temporary migration fallback for existing deployments.
+const supabaseUrl = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
 const tursoUrl = process.env.TURSO_DATABASE_URL;
-const postgresUrl = process.env.DATABASE_URL;
 
-// Store raw client reference for DDL operations
-let rawClient: any = null;
-
-function createDbInstance() {
-  if (tursoUrl) {
-    const client = createClient({
-      url: tursoUrl,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    rawClient = client;
-    return drizzleLibsql(client, { schema: tursoSchema });
-  }
-
-  if (postgresUrl) {
-    const globalForDb = globalThis as typeof globalThis & {
-      __arenaNextJsPostgresqlPool?: Pool;
-    };
-
-    const pool =
-      globalForDb.__arenaNextJsPostgresqlPool ??
-      new Pool({
-        connectionString: postgresUrl,
-      });
-
-    if (process.env.NODE_ENV !== "production") {
-      globalForDb.__arenaNextJsPostgresqlPool = pool;
-    }
-
-    rawClient = pool;
-    return drizzlePg(pool, { schema: pgSchema });
-  }
-
-  // Local fallback (development / test)
-  const fallbackUrl = process.env.NODE_ENV === "production" ? "file:/tmp/local.db" : "file:local.db";
-  const client = createClient({
-    url: fallbackUrl,
-  });
-  rawClient = client;
-  return drizzleLibsql(client, { schema: tursoSchema });
+if (!supabaseUrl) {
+  throw new Error("SUPABASE_DATABASE_URL is required for Supabase user and profile storage.");
 }
 
-export const db = createDbInstance() as any;
-
-// ----------------------------------------------------------------------------
-// Auto-create auth tables via raw client (bypasses drizzle query builder)
-// ----------------------------------------------------------------------------
-let tablesInitialized = false;
-
-async function execRaw(statement: string) {
-  if (tursoUrl || (!tursoUrl && !postgresUrl)) {
-    // libsql client — use .execute(string)
-    await rawClient.execute(statement);
-  } else if (postgresUrl) {
-    // pg Pool — use .query(string)
-    await rawClient.query(statement);
-  }
+if (!tursoUrl) {
+  throw new Error("TURSO_DATABASE_URL is required for Turso project storage.");
 }
 
-export async function ensureAuthTables() {
-  if (tablesInitialized) return;
-  if (!rawClient) return;
+const globalForDb = globalThis as typeof globalThis & {
+  __buildLedgerSupabasePool?: Pool;
+  __buildLedgerTursoClient?: ReturnType<typeof createClient>;
+};
 
-  try {
-    if (tursoUrl || (!tursoUrl && !postgresUrl)) {
-      // SQLite / Turso
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          email TEXT NOT NULL,
-          password TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'member',
-          phone TEXT,
-          created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL
-        )
-      `);
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS project_members (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          role TEXT NOT NULL DEFAULT 'member',
-          assigned_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL
-        )
-      `);
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          content TEXT NOT NULL,
-          is_read INTEGER NOT NULL DEFAULT 0,
-          created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL
-        )
-      `);
-      // Add progress column if missing
-      try {
-        await execRaw(`ALTER TABLE projects ADD COLUMN progress INTEGER NOT NULL DEFAULT 0`);
-      } catch {
-        // Column already exists — safe to ignore
-      }
-      try {
-        await execRaw(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
-      } catch {
-        // Column already exists
-      }
-    } else if (postgresUrl) {
-      // PostgreSQL
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          name TEXT NOT NULL,
-          email TEXT NOT NULL,
-          password TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'member',
-          phone TEXT,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
-        )
-      `);
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS project_members (
-          id SERIAL PRIMARY KEY,
-          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          role TEXT NOT NULL DEFAULT 'member',
-          assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
-        )
-      `);
-      await execRaw(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id SERIAL PRIMARY KEY,
-          sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          content TEXT NOT NULL,
-          is_read INTEGER NOT NULL DEFAULT 0,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
-        )
-      `);
-      try {
-        await execRaw(`ALTER TABLE projects ADD COLUMN progress INTEGER NOT NULL DEFAULT 0`);
-      } catch {
-        // Column already exists
-      }
-      try {
-        await execRaw(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
-      } catch {
-        // Column already exists
-      }
-    }
-    tablesInitialized = true;
-    console.log("✅ Auth tables verified/created successfully");
-  } catch (err) {
-    console.error("Failed auto-creating auth tables:", err);
-  }
+const supabasePool =
+  globalForDb.__buildLedgerSupabasePool ?? new Pool({ connectionString: supabaseUrl });
+const tursoClient =
+  globalForDb.__buildLedgerTursoClient ??
+  createClient({ url: tursoUrl, authToken: process.env.TURSO_AUTH_TOKEN });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.__buildLedgerSupabasePool = supabasePool;
+  globalForDb.__buildLedgerTursoClient = tursoClient;
 }
+
+export const supabaseDb = drizzlePg(supabasePool, { schema: pgSchema });
+export const tursoDb = drizzleLibsql(tursoClient, { schema: tursoSchema });
+
+// Supabase user/profile tables are created lazily so authentication routes work
+// on a fresh deployment. Project tables are managed with db:push:turso.
+let userTablesInitialized = false;
+
+export async function ensureSupabaseUserTables() {
+  if (userTablesInitialized) return;
+
+  await supabasePool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      phone TEXT,
+      avatar_url TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    )
+  `);
+  await supabasePool.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      is_read INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    )
+  `);
+  await supabasePool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
+
+  userTablesInitialized = true;
+}
+
+// Temporary compatibility export for existing callers while they are migrated.
+export const ensureUserTables = ensureSupabaseUserTables;
+export const ensureAuthTables = ensureSupabaseUserTables;

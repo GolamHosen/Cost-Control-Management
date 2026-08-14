@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import { toPublicUser } from "@/lib/avatar-storage";
@@ -15,7 +15,7 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   const [row] = await db
     .select({

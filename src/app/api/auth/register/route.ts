@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { db, ensureAuthTables } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb as db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession, hashPassword } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
   const existingAdmins = await db.select().from(users).where(eq(users.role, "admin"));
   return Response.json({ hasAdmin: existingAdmins.length > 0 });
 }
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure auth tables exist
-  await ensureAuthTables();
+  await ensureSupabaseUserTables();
 
   // Check one-time Admin constraint
   if (role === "admin") {
