@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import UserAvatar from "./UserAvatar";
 
 const NAV_ITEMS = [
   {
@@ -72,7 +73,7 @@ export function getInitials(name: string) {
 export default function Sidebar({
   user,
 }: {
-  user: { name: string; email: string; role: string } | null;
+  user: { name: string; email: string; role: string; avatarUrl?: string | null } | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -191,20 +192,27 @@ export default function Sidebar({
       {user && (
         <div className="border-t border-slate-100 p-3">
           <div className={`flex items-center gap-2.5 ${collapsed ? "justify-center" : ""}`}>
-            <div
-              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${getAvatarColor(user.name)}`}
+            <button
+              type="button"
+              onClick={() => router.push("/profile")}
+              className="flex-shrink-0 rounded-full transition hover:ring-2 hover:ring-amber-200"
+              title="My Profile"
             >
-              {getInitials(user.name)}
-            </div>
+              <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+            </button>
             {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold text-slate-800">
+              <button
+                type="button"
+                onClick={() => router.push("/profile")}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="truncate text-xs font-semibold text-slate-800 hover:text-amber-700">
                   {user.name}
                 </div>
-                <div className="truncate text-[10px] text-slate-400">
+                <div className="truncate text-[10px] capitalize text-slate-400">
                   {user.role}
                 </div>
-              </div>
+              </button>
             )}
             {!collapsed && (
               <button

@@ -17,6 +17,7 @@ export const users = sqliteTable("users", {
   password: text("password").notNull(),
   role: text("role").notNull().default("member"), // 'admin' | 'manager' | 'member'
   phone: text("phone"),
+  avatarUrl: text("avatar_url"),
   createdAt: text("created_at")
     .default(sql`(CURRENT_TIMESTAMP)`)
     .notNull(),

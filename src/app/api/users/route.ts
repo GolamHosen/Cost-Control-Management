@@ -16,6 +16,7 @@ export async function GET() {
       email: users.email,
       role: users.role,
       phone: users.phone,
+      avatarUrl: users.avatarUrl,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
       email: newUser.email,
       role: newUser.role,
       phone: newUser.phone,
+      avatarUrl: newUser.avatarUrl ?? null,
       createdAt: newUser.createdAt,
     },
     { status: 201 }

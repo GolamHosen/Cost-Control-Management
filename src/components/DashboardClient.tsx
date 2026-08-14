@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Project, User } from "@/lib/types";
 import { computeReconciliation, formatCurrency } from "@/lib/finance";
-import { getAvatarColor, getInitials } from "@/components/Sidebar";
+import UserAvatar from "@/components/UserAvatar";
 
 interface Props {
   projects: Project[];
@@ -204,15 +204,13 @@ export default function DashboardClient({ projects, teamMembers }: Props) {
                       <td className="px-4 py-3">
                         <div className="flex -space-x-2">
                           {(p.members ?? []).slice(0, 4).map((m) => (
-                            <div
+                            <UserAvatar
                               key={m.id}
-                              className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${getAvatarColor(
-                                m.user?.name ?? "?"
-                              )}`}
-                              title={m.user?.name}
-                            >
-                              {getInitials(m.user?.name ?? "?")}
-                            </div>
+                              name={m.user?.name ?? "?"}
+                              avatarUrl={m.user?.avatarUrl}
+                              size="xs"
+                              className="border-2 border-white"
+                            />
                           ))}
                           {(p.members ?? []).length > 4 && (
                             <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-200 text-[10px] font-bold text-slate-600">
@@ -272,13 +270,7 @@ export default function DashboardClient({ projects, teamMembers }: Props) {
                     className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${getAvatarColor(
-                          u.name
-                        )}`}
-                      >
-                        {getInitials(u.name)}
-                      </div>
+                      <UserAvatar name={u.name} avatarUrl={u.avatarUrl} size="md" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-bold text-slate-900">
                           {u.name}

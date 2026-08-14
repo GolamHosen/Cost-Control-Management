@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getAvatarColor, getInitials } from "./Sidebar";
+import UserAvatar from "./UserAvatar";
 
 interface Contact {
   user: {
@@ -9,6 +9,7 @@ interface Contact {
     name: string;
     email: string;
     role: string;
+    avatarUrl?: string | null;
   };
   lastMessage: {
     content: string;
@@ -197,13 +198,12 @@ export default function MessagesClient({
                 >
                   {/* User Avatar */}
                   <div className="relative">
-                    <div
-                      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ${getAvatarColor(
-                        contact.user.name
-                      )}`}
-                    >
-                      {getInitials(contact.user.name)}
-                    </div>
+                    <UserAvatar
+                      name={contact.user.name}
+                      avatarUrl={contact.user.avatarUrl}
+                      size="md"
+                      className="shadow-sm"
+                    />
                   </div>
 
                   {/* Info & Last Message */}
@@ -259,13 +259,11 @@ export default function MessagesClient({
           {/* Active Partner Header */}
           <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
             <div className="flex items-center gap-3">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${getAvatarColor(
-                  selectedContact.user.name
-                )}`}
-              >
-                {getInitials(selectedContact.user.name)}
-              </div>
+              <UserAvatar
+                name={selectedContact.user.name}
+                avatarUrl={selectedContact.user.avatarUrl}
+                size="sm"
+              />
               <div>
                 <h2 className="text-sm font-bold text-slate-900">
                   {selectedContact.user.name}

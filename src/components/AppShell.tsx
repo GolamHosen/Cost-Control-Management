@@ -8,7 +8,7 @@ export default function AppShell({
   user,
   children,
 }: {
-  user: { name: string; email: string; role: string } | null;
+  user: { name: string; email: string; role: string; avatarUrl?: string | null } | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();

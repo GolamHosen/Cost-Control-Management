@@ -109,6 +109,11 @@ export async function ensureAuthTables() {
       } catch {
         // Column already exists — safe to ignore
       }
+      try {
+        await execRaw(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
+      } catch {
+        // Column already exists
+      }
     } else if (postgresUrl) {
       // PostgreSQL
       await execRaw(`
@@ -143,6 +148,11 @@ export async function ensureAuthTables() {
       `);
       try {
         await execRaw(`ALTER TABLE projects ADD COLUMN progress INTEGER NOT NULL DEFAULT 0`);
+      } catch {
+        // Column already exists
+      }
+      try {
+        await execRaw(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
       } catch {
         // Column already exists
       }

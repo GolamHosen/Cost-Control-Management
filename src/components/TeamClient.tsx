@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
-import { getAvatarColor, getInitials } from "@/components/Sidebar";
+import UserAvatar from "@/components/UserAvatar";
 
 interface AssignmentInfo {
   projectId: number;
@@ -135,11 +135,7 @@ export default function TeamClient({ teamMembers, assignmentMap, allProjects }: 
                   {/* User Info */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white ${getAvatarColor(user.name)}`}
-                      >
-                        {getInitials(user.name)}
-                      </div>
+                      <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size="lg" />
                       <div>
                         <div className="font-bold text-slate-900">{user.name}</div>
                         <div className="text-xs text-slate-500">{user.email}</div>

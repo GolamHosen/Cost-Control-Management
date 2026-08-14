@@ -22,6 +22,7 @@ export async function GET() {
       name: users.name,
       email: users.email,
       role: users.role,
+      avatarUrl: users.avatarUrl,
     })
     .from(users)
     .where(sql`${users.id} != ${currentUserId}`);
@@ -39,7 +40,7 @@ export async function GET() {
     .orderBy(desc(messages.createdAt));
 
   // Build contact previews with last message and unread count
-  const contacts = allUsers.map((u: { id: number; name: string; email: string; role: string }) => {
+  const contacts = allUsers.map((u: { id: number; name: string; email: string; role: string; avatarUrl: string | null }) => {
     const chat = userMessages.filter(
       (m: { senderId: number; receiverId: number }) => m.senderId === u.id || m.receiverId === u.id
     );

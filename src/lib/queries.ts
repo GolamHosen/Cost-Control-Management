@@ -74,6 +74,7 @@ function mapMember(m: RawProject["members"][number]): ProjectMember {
           email: m.user.email,
           role: m.user.role as UserRole,
           phone: m.user.phone ?? null,
+          avatarUrl: m.user.avatarUrl ?? null,
           createdAt: m.user.createdAt ? String(m.user.createdAt) : "",
         }
       : undefined,

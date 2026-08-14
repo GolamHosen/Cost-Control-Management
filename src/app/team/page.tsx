@@ -23,6 +23,7 @@ export default async function TeamPage() {
       email: users.email,
       role: users.role,
       phone: users.phone,
+      avatarUrl: users.avatarUrl,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -65,6 +66,7 @@ export default async function TeamPage() {
     <TeamClient
       teamMembers={teamMembers.map((u: any) => ({
         ...u,
+        avatarUrl: u.avatarUrl ?? null,
         createdAt: u.createdAt ? String(u.createdAt) : "",
       }))}
       assignmentMap={assignmentMap}
