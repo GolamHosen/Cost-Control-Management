@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Column, Sheet, SheetRow, SheetType } from "@/lib/types";
 import { COLUMN_TYPES, RECONCILE_ROLES } from "@/lib/types";
 import { formatCurrency, formatNumber, parseNumber } from "@/lib/finance";
@@ -213,6 +213,13 @@ export default function Spreadsheet({
     setLocalColWidths(map);
   }, [cols]);
 
+  // If a sheet has no rows, automatically add initial rows so the canvas is full
+  useEffect(() => {
+    if (rows.length === 0) {
+      onAddRow();
+    }
+  }, [rows.length, onAddRow]);
+
   const cellValue = (r: number, c: number) => rows[r]?.cells[cols[c]?.id] ?? "";
 
   // Active Range Normalizer
@@ -262,6 +269,38 @@ export default function Spreadsheet({
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, [dragMode]);
 
+  // Clear all cells in the selected range
+  const clearSelectedRange = useCallback(() => {
+    if (!activeRange) return;
+    for (let rIdx = activeRange.r1; rIdx <= activeRange.r2; rIdx++) {
+      const row = rows[rIdx];
+      if (!row) continue;
+      for (let cIdx = activeRange.c1; cIdx <= activeRange.c2; cIdx++) {
+        const col = cols[cIdx];
+        if (!col) continue;
+        if (cellValue(rIdx, cIdx) !== "") {
+          onChangeCell(row.id, col.id, "");
+        }
+      }
+    }
+    setDraft("");
+  }, [activeRange, rows, cols, onChangeCell]);
+
+  // Select all cells in spreadsheet
+  const handleSelectAll = useCallback(() => {
+    if (rows.length === 0 || cols.length === 0) return;
+    commit();
+    setIsEditing(false);
+    setSelected({ r: 0, c: 0 });
+    setDraft(cellValue(0, 0));
+    setSelectionRange({
+      r1: 0,
+      c1: 0,
+      r2: rows.length - 1,
+      c2: cols.length - 1,
+    });
+  }, [rows, cols]);
+
   // Global keydown handler for Delete / Backspace / Ctrl+A
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -284,38 +323,7 @@ export default function Spreadsheet({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeRange, rows, cols]);
-
-  // Clear all cells in the selected range
-  function clearSelectedRange() {
-    if (!activeRange) return;
-    for (let rIdx = activeRange.r1; rIdx <= activeRange.r2; rIdx++) {
-      const row = rows[rIdx];
-      if (!row) continue;
-      for (let cIdx = activeRange.c1; cIdx <= activeRange.c2; cIdx++) {
-        const col = cols[cIdx];
-        if (!col) continue;
-        if (cellValue(rIdx, cIdx) !== "") {
-          onChangeCell(row.id, col.id, "");
-        }
-      }
-    }
-    setDraft("");
-  }
-
-  // Select all cells in spreadsheet
-  function handleSelectAll() {
-    commit();
-    setIsEditing(false);
-    setSelected({ r: 0, c: 0 });
-    setDraft(cellValue(0, 0));
-    setSelectionRange({
-      r1: 0,
-      c1: 0,
-      r2: Math.max(0, rows.length - 1),
-      c2: Math.max(0, cols.length - 1),
-    });
-  }
+  }, [activeRange, handleSelectAll, clearSelectedRange]);
 
   // Row header mouse click & drag
   function handleRowHeaderMouseDown(e: React.MouseEvent, rowIdx: number) {
@@ -1443,6 +1451,25 @@ export default function Spreadsheet({
           </thead>
 
           <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={cols.length + 2}
+                  className="py-16 text-center text-slate-400 bg-slate-50/50"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">This sheet has no rows yet</span>
+                    <button
+                      type="button"
+                      onClick={onAddRow}
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 shadow-xs"
+                    >
+                      <Plus width={13} /> Add First Row
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
             {rows.map((r, rowIdx) => {
               const isEven = rowIdx % 2 === 0;
               const curRowHeight = Math.max(rowHeights[r.id] ?? baseRowHeight, fontSize + 16);
@@ -1620,14 +1647,29 @@ function ColumnHeader({
       </button>
 
       {open && (
-        <ColumnMenu
-          col={col}
-          sheetType={sheetType}
-          onClose={() => setOpen(false)}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          onMove={onMove}
-        />
+        <>
+          {/* Backdrop overlay to close menu on click outside */}
+          <div
+            className="fixed inset-0 z-40 bg-transparent"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
+          <ColumnMenu
+            col={col}
+            colIndex={colIndex}
+            sheetType={sheetType}
+            onClose={() => setOpen(false)}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            onMove={onMove}
+          />
+        </>
       )}
     </div>
   );
@@ -1635,6 +1677,7 @@ function ColumnHeader({
 
 function ColumnMenu({
   col,
+  colIndex,
   sheetType,
   onClose,
   onUpdate,
@@ -1642,6 +1685,7 @@ function ColumnMenu({
   onMove,
 }: {
   col: Column;
+  colIndex?: number;
   sheetType: SheetType;
   onClose: () => void;
   onUpdate: (patch: Partial<Column>) => void;
@@ -1652,6 +1696,15 @@ function ColumnMenu({
   const [type, setType] = useState(col.type);
   const [optionsStr, setOptionsStr] = useState((col.options ?? []).join(", "));
   const [role, setRole] = useState(col.reconcileRole ?? "");
+
+  const isLeftAligned = (colIndex ?? 0) < 3;
+
+  useEffect(() => {
+    setLabel(col.label);
+    setType(col.type);
+    setOptionsStr((col.options ?? []).join(", "));
+    setRole(col.reconcileRole ?? "");
+  }, [col]);
 
   const roles = RECONCILE_ROLES[sheetType] ?? [];
 
@@ -1673,10 +1726,29 @@ function ColumnMenu({
   }
 
   return (
-    <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-slate-800 font-normal">
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      className={`absolute ${
+        isLeftAligned ? "left-0" : "right-0"
+      } top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl text-slate-800 font-normal cursor-default select-text`}
+    >
       <div className="mb-2 flex items-center justify-between border-b pb-1">
         <span className="text-xs font-bold text-slate-800">Edit Column Settings</span>
-        <button onClick={onClose} className="rounded p-0.5 text-slate-400 hover:bg-slate-100">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+        >
           <X width={12} />
         </button>
       </div>
@@ -1685,16 +1757,24 @@ function ColumnMenu({
         <div>
           <label className="block text-[10px] uppercase font-semibold text-slate-500">Column Label</label>
           <input
-            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600"
+            type="text"
+            autoFocus
+            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-white text-slate-800 text-xs font-medium"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                save();
+              }
+            }}
           />
         </div>
 
         <div>
           <label className="block text-[10px] uppercase font-semibold text-slate-500">Data Type</label>
           <select
-            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600"
+            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-white text-slate-800 text-xs"
             value={type}
             onChange={(e) => setType(e.target.value as any)}
           >
@@ -1712,8 +1792,10 @@ function ColumnMenu({
               Dropdown Options (comma-separated)
             </label>
             <input
-              className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600"
+              type="text"
+              className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-white text-slate-800 text-xs"
               value={optionsStr}
+              placeholder="e.g. Pending, Paid, Overdue"
               onChange={(e) => setOptionsStr(e.target.value)}
             />
           </div>
@@ -1724,7 +1806,7 @@ function ColumnMenu({
             Reconciliation Matching Role
           </label>
           <select
-            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600"
+            className="w-full rounded border border-slate-300 px-2 py-1 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-white text-slate-800 text-xs"
             value={role}
             onChange={(e) => setRole(e.target.value)}
           >
@@ -1740,7 +1822,9 @@ function ColumnMenu({
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
           <div className="flex gap-1">
             <button
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
                 onMove(-1);
                 onClose();
               }}
@@ -1750,7 +1834,9 @@ function ColumnMenu({
               <ChevronLeft width={12} />
             </button>
             <button
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
                 onMove(1);
                 onClose();
               }}
@@ -1762,8 +1848,10 @@ function ColumnMenu({
           </div>
 
           <button
-            onClick={() => {
-              if (confirm("Delete this column?")) {
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm("Are you sure you want to delete this column and its data?")) {
                 onDelete();
                 onClose();
               }
@@ -1777,8 +1865,12 @@ function ColumnMenu({
 
       <div className="mt-3 flex justify-end">
         <button
-          onClick={save}
-          className="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-800"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            save();
+          }}
+          className="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-800 shadow-xs"
         >
           Save Changes
         </button>

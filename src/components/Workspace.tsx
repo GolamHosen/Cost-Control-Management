@@ -21,21 +21,27 @@ import {
   Calendar,
   Check,
   Download,
+  Menu,
   Pencil,
   Plus,
   Scale,
+  Trash,
   Wallet,
   X,
 } from "./Icons";
 
-type Tab = "expense" | "cost" | "reconcile";
+type Tab = number | "reconcile";
 
 export default function Workspace({ initial }: { initial: Project }) {
   const router = useRouter();
   const [project, setProject] = useState<Project>(initial);
-  const [tab, setTab] = useState<Tab>("expense");
+  const [tab, setTab] = useState<Tab>(initial.sheets[0]?.id ?? "reconcile");
   const [editing, setEditing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [renamingSheetId, setRenamingSheetId] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [openSheetMenuId, setOpenSheetMenuId] = useState<number | null>(null);
+  const [sheetToDelete, setSheetToDelete] = useState<{ id: number; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const base = `/api/projects/${project.id}`;
@@ -166,14 +172,21 @@ export default function Workspace({ initial }: { initial: Project }) {
   const updateColumn = (sheetId: number, colId: number, patchData: Partial<Column>) => {
     setProject((prev) => ({
       ...prev,
-      sheets: prev.sheets.map((s) =>
-        s.id !== sheetId
-          ? s
-          : {
-              ...s,
-              columns: s.columns.map((c) => (c.id === colId ? { ...c, ...patchData } : c)),
-            },
-      ),
+      sheets: prev.sheets.map((s) => {
+        if (s.id !== sheetId) return s;
+        return {
+          ...s,
+          columns: s.columns.map((c) => {
+            if (c.id === colId) {
+              return { ...c, ...patchData };
+            }
+            if (patchData.reconcileRole && c.reconcileRole === patchData.reconcileRole) {
+              return { ...c, reconcileRole: null };
+            }
+            return c;
+          }),
+        };
+      }),
     }));
     patch(`/columns/${colId}`, patchData).catch(() => {});
   };
@@ -181,11 +194,18 @@ export default function Workspace({ initial }: { initial: Project }) {
   const deleteColumn = (sheetId: number, colId: number) => {
     setProject((prev) => ({
       ...prev,
-      sheets: prev.sheets.map((s) =>
-        s.id !== sheetId
-          ? s
-          : { ...s, columns: s.columns.filter((c) => c.id !== colId) },
-      ),
+      sheets: prev.sheets.map((s) => {
+        if (s.id !== sheetId) return s;
+        return {
+          ...s,
+          columns: s.columns.filter((c) => c.id !== colId),
+          rows: s.rows.map((r) => {
+            const nextCells = { ...r.cells };
+            delete nextCells[colId];
+            return { ...r, cells: nextCells };
+          }),
+        };
+      }),
     }));
     del(`/columns/${colId}`).catch(() => {});
   };
@@ -212,6 +232,107 @@ export default function Workspace({ initial }: { initial: Project }) {
         return { ...s, columns: reindexed };
       }),
     }));
+  };
+
+  const addSheet = () => {
+    const sheetNumber = project.sheets.length + 1;
+    const finalName = `Sheet ${sheetNumber}`;
+
+    const tempId = -Math.floor(Math.random() * 1e9);
+
+    const optimisticRows = Array.from({ length: 25 }, (_, i) => ({
+      id: tempId - 100 - i,
+      position: i,
+      cells: {},
+    }));
+
+    const optimisticSheet: Sheet = {
+      id: tempId,
+      projectId: project.id,
+      name: finalName,
+      type: "expense",
+      position: project.sheets.length,
+      columns: [
+        { id: tempId - 1, sheetId: tempId, label: "Date", type: "date", width: 140, position: 0 },
+        { id: tempId - 2, sheetId: tempId, label: "Cost Code", type: "text", reconcileRole: "reconcile_key", width: 130, position: 1 },
+        { id: tempId - 3, sheetId: tempId, label: "Category", type: "select", options: ["Materials", "Labour", "Subcontractor", "Plant & Equipment", "Preliminaries", "Provisional Sum", "Other"], width: 170, position: 2 },
+        { id: tempId - 4, sheetId: tempId, label: "Description", type: "text", width: 240, position: 3 },
+        { id: tempId - 5, sheetId: tempId, label: "Supplier", type: "text", width: 180, position: 4 },
+        { id: tempId - 6, sheetId: tempId, label: "Amount", type: "currency", reconcileRole: "expense_amount", width: 150, position: 5 },
+        { id: tempId - 7, sheetId: tempId, label: "Status", type: "select", options: ["Paid", "Unpaid", "Pending"], width: 120, position: 6 },
+        { id: tempId - 8, sheetId: tempId, label: "Notes", type: "text", width: 200, position: 7 },
+      ],
+      rows: optimisticRows,
+    };
+
+    setProject((prev) => ({
+      ...prev,
+      sheets: [...prev.sheets, optimisticSheet],
+    }));
+    setTab(tempId);
+
+    post("/sheets", { name: finalName, type: "expense" })
+      .then((res) => res.json())
+      .then((data: Sheet) => {
+        setProject((prev) => ({
+          ...prev,
+          sheets: prev.sheets.map((s) => (s.id === tempId ? data : s)),
+        }));
+        setTab(data.id);
+      })
+      .catch((err) => {
+        console.error("Failed to create sheet:", err);
+      });
+  };
+
+  const startRenameSheet = (sheetId: number, currentName: string) => {
+    setRenamingSheetId(sheetId);
+    setRenameDraft(currentName);
+    setOpenSheetMenuId(null);
+  };
+
+  const commitRenameSheet = (sheetId: number) => {
+    const trimmed = renameDraft.trim();
+    if (!trimmed) {
+      setRenamingSheetId(null);
+      return;
+    }
+
+    setProject((prev) => ({
+      ...prev,
+      sheets: prev.sheets.map((s) => (s.id === sheetId ? { ...s, name: trimmed } : s)),
+    }));
+    setRenamingSheetId(null);
+    patch(`/sheets/${sheetId}`, { name: trimmed }).catch(() => {});
+  };
+
+  const cancelRenameSheet = () => {
+    setRenamingSheetId(null);
+  };
+
+  const requestDeleteSheet = (sheetId: number, sheetName: string) => {
+    setOpenSheetMenuId(null);
+    if (project.sheets.length <= 1) {
+      alert("A project must have at least one sheet.");
+      return;
+    }
+    setSheetToDelete({ id: sheetId, name: sheetName });
+  };
+
+  const executeDeleteSheet = () => {
+    if (!sheetToDelete) return;
+    const { id: sheetId } = sheetToDelete;
+
+    const nextSheets = project.sheets.filter((s) => s.id !== sheetId);
+    setProject((prev) => ({
+      ...prev,
+      sheets: nextSheets,
+    }));
+    if (tab === sheetId) {
+      setTab(nextSheets[0]?.id ?? "reconcile");
+    }
+    setSheetToDelete(null);
+    del(`/sheets/${sheetId}`).catch(() => {});
   };
 
   const saveProject = (p: Partial<Project>) => {
@@ -324,10 +445,10 @@ export default function Workspace({ initial }: { initial: Project }) {
     URL.revokeObjectURL(url);
   };
 
-  const expenseSheet = project.sheets.find((s) => s.type === "expense");
-  const costSheet = project.sheets.find((s) => s.type === "cost_control");
   const activeSheet =
-    tab === "expense" ? expenseSheet : tab === "cost" ? costSheet : undefined;
+    typeof tab === "number"
+      ? project.sheets.find((s) => s.id === tab) ?? project.sheets[0]
+      : undefined;
   const rec = computeReconciliation(project);
 
   return (
@@ -472,50 +593,130 @@ export default function Workspace({ initial }: { initial: Project }) {
 
           {/* Authentic Excel Bottom Sheet Tab Bar */}
           <div className="border-t-2 border-slate-300 bg-slate-200 flex flex-wrap items-center justify-between px-2 pt-1 select-none">
-            {/* Sheet Tabs */}
+            {/* Dynamic Sheet Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto">
-              {/* Tab 1: Expense Sheet */}
-              <button
-                type="button"
-                onClick={() => setTab("expense")}
-                className={`group flex items-center gap-2 rounded-t-lg px-4 py-2 text-xs font-bold transition ${
-                  tab === "expense"
-                    ? "bg-white text-emerald-800 shadow border-t-2 border-emerald-600"
-                    : "bg-slate-300/70 text-slate-600 hover:bg-slate-300"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span>Balance Sheet &amp; Expenses</span>
-                <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                  {expenseSheet?.rows.length ?? 0} rows
-                </span>
-              </button>
+              {project.sheets.map((sheet, index) => {
+                const isActive = tab === sheet.id;
+                const isRenaming = renamingSheetId === sheet.id;
+                const isMenuOpen = openSheetMenuId === sheet.id;
+                const dotColors = [
+                  "bg-emerald-500",
+                  "bg-sky-500",
+                  "bg-amber-500",
+                  "bg-violet-500",
+                  "bg-rose-500",
+                  "bg-indigo-500",
+                  "bg-teal-500",
+                ];
+                const dotColor = dotColors[index % dotColors.length];
 
-              {/* Tab 2: Cost Control Sheet */}
-              <button
-                type="button"
-                onClick={() => setTab("cost")}
-                className={`group flex items-center gap-2 rounded-t-lg px-4 py-2 text-xs font-bold transition ${
-                  tab === "cost"
-                    ? "bg-white text-emerald-800 shadow border-t-2 border-emerald-600"
-                    : "bg-slate-300/70 text-slate-600 hover:bg-slate-300"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-sky-500" />
-                <span>Cost Control &amp; Payments</span>
-                <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                  {costSheet?.rows.length ?? 0} rows
-                </span>
-              </button>
+                return (
+                  <div
+                    key={sheet.id}
+                    className="relative flex items-center"
+                  >
+                    <div
+                      onClick={() => setTab(sheet.id)}
+                      onDoubleClick={() => startRenameSheet(sheet.id, sheet.name)}
+                      className={`group flex items-center gap-1.5 rounded-t-lg pl-3 pr-2 py-1.5 text-xs font-bold transition cursor-pointer ${
+                        isActive
+                          ? "bg-white text-emerald-800 shadow border-t-2 border-emerald-600"
+                          : "bg-slate-300/70 text-slate-600 hover:bg-slate-300 hover:text-slate-800"
+                      }`}
+                      title={`${sheet.name} (Double-click to rename)`}
+                    >
+                      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${dotColor}`} />
 
-              {/* Tab 3: Cross Check Summary */}
+                      {isRenaming ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={renameDraft}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onBlur={() => commitRenameSheet(sheet.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              commitRenameSheet(sheet.id);
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelRenameSheet();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-6 w-32 rounded border border-emerald-600 bg-white px-1.5 text-xs font-bold text-slate-800 outline-none shadow-inner"
+                        />
+                      ) : (
+                        <span className="truncate max-w-[140px] sm:max-w-[180px]">
+                          {sheet.name}
+                        </span>
+                      )}
+
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                        {sheet.rows.length}
+                      </span>
+
+                      {/* Tab Options Menu Button (⋯) */}
+                      {!isRenaming && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenSheetMenuId(isMenuOpen ? null : sheet.id);
+                          }}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-800 transition"
+                          title="Sheet options"
+                        >
+                          <Menu width={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sheet Context Menu Popup */}
+                    {isMenuOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40 bg-transparent"
+                          onClick={() => setOpenSheetMenuId(null)}
+                        />
+                        <div
+                          className="absolute bottom-full left-0 z-50 mb-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl text-xs text-slate-700 font-medium"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => startRenameSheet(sheet.id, sheet.name)}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 transition"
+                          >
+                            <Pencil width={13} className="text-slate-500" />
+                            <span>Rename Sheet</span>
+                          </button>
+
+                          {project.sheets.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteSheet(sheet.id, sheet.name)}
+                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 transition"
+                            >
+                              <Trash width={13} className="text-rose-500" />
+                              <span>Delete Sheet</span>
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Tab: Cross Check Summary */}
               <button
                 type="button"
                 onClick={() => setTab("reconcile")}
-                className={`group flex items-center gap-2 rounded-t-lg px-4 py-2 text-xs font-bold transition ${
+                className={`group flex items-center gap-2 rounded-t-lg px-3.5 py-2 text-xs font-bold transition ${
                   tab === "reconcile"
                     ? "bg-white text-emerald-800 shadow border-t-2 border-emerald-600"
-                    : "bg-slate-300/70 text-slate-600 hover:bg-slate-300"
+                    : "bg-slate-300/70 text-slate-600 hover:bg-slate-300 hover:text-slate-800"
                 }`}
               >
                 <span
@@ -523,7 +724,7 @@ export default function Workspace({ initial }: { initial: Project }) {
                     rec.balanced ? "bg-emerald-500" : "bg-rose-500"
                   }`}
                 />
-                <span>⚖️ Cross-Check Summary</span>
+                <span>⚖️ Cross-Check</span>
                 {!rec.balanced && (
                   <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">
                     Unbalanced
@@ -531,12 +732,12 @@ export default function Workspace({ initial }: { initial: Project }) {
                 )}
               </button>
 
-              {/* Excel Add Sheet Icon Button */}
+              {/* Excel Add Sheet Button (+) */}
               <button
                 type="button"
-                onClick={() => addColumn(activeSheet?.id ?? 0)}
-                className="flex items-center justify-center h-7 w-7 rounded-t-lg bg-slate-300/50 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition"
-                title="Add Column to active sheet"
+                onClick={addSheet}
+                className="flex items-center justify-center h-7 w-7 rounded-t-lg bg-slate-300/60 text-slate-700 hover:bg-emerald-700 hover:text-white transition shadow-2xs ml-1"
+                title="Add New Sheet (+)"
               >
                 <Plus width={14} />
               </button>
@@ -565,6 +766,48 @@ export default function Workspace({ initial }: { initial: Project }) {
           </div>
         </div>
       </main>
+
+      {/* Delete Sheet Confirmation Modal */}
+      {sheetToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash width={18} />
+                <h3 className="font-bold text-slate-900 text-sm">Delete Sheet</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetToDelete(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X width={14} />
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete <strong className="text-slate-900 font-semibold">&ldquo;{sheetToDelete.name}&rdquo;</strong> and all of its columns, rows, and data? This action cannot be undone.
+            </p>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSheetToDelete(null)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeDeleteSheet}
+                className="rounded-lg bg-rose-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 transition shadow-xs"
+              >
+                Delete Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

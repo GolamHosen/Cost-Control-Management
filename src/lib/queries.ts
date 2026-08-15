@@ -1,5 +1,5 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
-import { supabaseDb, tursoDb } from "@/db";
+import { ensureSupabaseUserTables, supabaseDb, tursoDb } from "@/db";
 import { columns, projectMembers, projects, rows, sheets, users } from "@/db/schema";
 import type { Column, Project, ProjectMember, Sheet, SheetRow, User, UserRole } from "./types";
 
@@ -87,39 +87,45 @@ async function hydrateMembers(projectList: Project[]): Promise<Project[]> {
   const userIds = [...new Set(projectList.flatMap((project) => project.members?.map((m) => m.userId) ?? []))];
   if (!userIds.length) return projectList;
 
-  const dbUsers = await supabaseDb
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      phone: users.phone,
-      avatarUrl: users.avatarUrl,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(inArray(users.id, userIds));
+  try {
+    await ensureSupabaseUserTables();
+    const dbUsers = await supabaseDb
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        phone: users.phone,
+        avatarUrl: users.avatarUrl,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(inArray(users.id, userIds));
 
-  const usersById = new Map<number, User>(
-    dbUsers.map((user) => [
-      user.id,
-      {
-        ...user,
-        role: user.role as UserRole,
-        phone: user.phone ?? null,
-        avatarUrl: user.avatarUrl ?? null,
-        createdAt: String(user.createdAt),
-      },
-    ]),
-  );
+    const usersById = new Map<number, User>(
+      dbUsers.map((user) => [
+        user.id,
+        {
+          ...user,
+          role: user.role as UserRole,
+          phone: user.phone ?? null,
+          avatarUrl: user.avatarUrl ?? null,
+          createdAt: String(user.createdAt),
+        },
+      ]),
+    );
 
-  return projectList.map((project) => ({
-    ...project,
-    members: project.members?.map((member) => ({
-      ...member,
-      user: usersById.get(member.userId),
-    })),
-  }));
+    return projectList.map((project) => ({
+      ...project,
+      members: project.members?.map((member) => ({
+        ...member,
+        user: usersById.get(member.userId),
+      })),
+    }));
+  } catch (error) {
+    console.error("Warning: Failed to hydrate project members from Supabase:", error);
+    return projectList;
+  }
 }
 
 export async function listProjects(userId?: number, userRole?: string): Promise<Project[]> {
